@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Download the compiled program
-wget https://abc.com/rmlint -O rmlint
+wget "https://github.com/Frozen12/Frequently-Used-Files/raw/rmlint/rmlint" -O rmlint
 
 # Check that the download was successful
 if [ $? -ne 0 ]; then
