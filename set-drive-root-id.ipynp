@@ -1,0 +1,77 @@
+#@markdown <h2> <center><b> update rclone.conf drive remote root ID </b></center> </h2> {display-mode: "form"}
+import subprocess
+import re
+import os
+
+# Input variables; Change the value if needed 
+#@markdown <h6> <center>Drive Remote Name Prefix to select desired remotes</center> </h6>
+
+prefix = 'saI' #@param {type:"string"}
+config_file = 'rclone.conf'
+new_config_file = 'new_rclone.conf'
+
+
+# The script is dependent on rclone v_1.61.1 
+# The script may or may not work with other versions of rclone
+
+# Color Codes
+boldLightGreen = "\033[1;32m"
+boldLightRed = "\033[1;31m"
+boldLightBlue = "\033[1;36m"
+noColor = "\033[0m"
+
+# Check if the rclone.conf file is present and new_config_file is not present
+if not os.path.isfile(config_file):
+    print(f"{boldLightRed}{config_file} is not present in current directory.{noColor}")
+    raise KeyboardInterrupt
+elif os.path.isfile(new_config_file):
+    print(f"{boldLightRed}{new_config_file} is already present in current directory.{noColor}")
+    raise KeyboardInterrupt
+elif os.path.isfile('rclone_lsd.txt'):
+    print(f"{boldLightBlue}rclone_lsd.txt{noColor} is present in current directory from privious run. {boldLightRed}Deleting{noColor} {boldLightBlue}rclone_lsd.txt{noColor} ...")
+    os.remove('rclone_lsd.txt')
+    
+# Open the file and read all lines
+with open(config_file, 'r') as f:
+    lines = f.readlines()
+for i, line in enumerate(lines):
+    # Check if the line matches the prefix pattern
+    if re.match(fr"^\[.*\]$", line):
+        remote = re.sub(fr"[\[\]]", "", line)  # Remove 3rd brackets `[]`
+        remote = remote.replace('\n', ':')  # Remove any newline `\n` characters and add `:`
+
+        # Get all the remote configuration save it to configuration.txt
+        configuration_output = subprocess.run(['rclone', '--config', config_file, 'config', 'show', remote, '-q'], capture_output=True, text=True)
+        configuration_output.stdout = configuration_output.stdout[:-1] # remove last character `\n`
+        if configuration_output.returncode != 0:
+            print(f"{boldLightRed}Error while running rclone --config {config_file} config show {remote}{noColor}")
+            print(configuration_output.stderr)
+            raise KeyboardInterrupt
+        
+        # check if remote name has {prefix}
+        match = re.search(fr"^\[{prefix}.*\]", configuration_output.stdout)
+        if match:
+            # Get root_folder_id from rclone logs
+            ! rm rclone_lsd.txt > /dev/null 2>&1 # remove rclone_lsd.txt to avoid unintended results
+            lsd_output = subprocess.run(['rclone', 'lsd', '-vv', '--config', config_file, remote, '--log-file', 'rclone_lsd.txt'], capture_output=True, text=True)
+            if lsd_output.returncode != 0:
+                print(f"{boldLightRed}Error while running rclone lsd command for {remote}:{noColor}")
+                print(lsd_output.stderr)
+                raise KeyboardInterrupt
+            with open('rclone_lsd.txt', 'r') as f:
+                logs = f.read()
+            match = re.search(fr"root_folder_id\s*=\s*([^\s']*)", logs)
+            if match:
+                drive_root_id = f'root_folder_id = "{match.group(1)}"'
+                print(f"{boldLightGreen}root_folder_id{noColor} added to {boldLightBlue}{remote}{noColor}")
+                ! echo "{configuration_output.stdout}" >> {new_config_file}
+                ! echo "{drive_root_id}" >> {new_config_file}                
+                ! echo "" >> {new_config_file}
+                ! rm rclone_lsd.txt > /dev/null 2>&1
+       # else:
+           # ! echo "{configuration_output.stdout}" >> {new_config_file}
+           # ! echo "" >> {new_config_file}
+           # Clean up
+           # ! rm rclone_lsd.txt > /dev/null 2>&1 
+            
+print(f"{boldLightGreen}Task Completed!!{noColor}")
